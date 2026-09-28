@@ -503,7 +503,7 @@
         </div>
         <svg class="diagram" id="diagram" viewBox="0 0 800 500" role="group" aria-labelledby="diagram-title diagram-description">
           <title id="diagram-title">Select an angle to answer the challenge</title>
-          <desc id="diagram-description">Two lines are crossed by a randomly angled transversal. Each numbered angle region is a clickable answer choice. Angles one to four are around the first crossing along the transversal, and angles five to eight are around the second crossing.</desc>
+          <desc id="diagram-description">Two blue lines are crossed by a fixed, slightly tilted orange transversal. Each numbered angle region is a clickable answer choice. Angles one to four are around the upper crossing, and angles five to eight are around the lower crossing.</desc>
           <line class="base-line" id="upper-line" x1="48" y1="175" x2="752" y2="175" />
           <line class="base-line" id="lower-line" x1="48" y1="345" x2="752" y2="345" />
           <line class="transversal" x1="345" y1="45" x2="415" y2="480" />
@@ -524,7 +524,7 @@
       <canvas class="win-confetti" id="win-confetti" aria-hidden="true"></canvas>
     </section>
 
-    <p class="note"><span class="note-mark" aria-hidden="true">i</span><span id="mode-note">The orange transversal is randomly near vertical or near horizontal. Each blue line gets its own angle from 30° to 120°.</span></p>
+    <p class="note"><span class="note-mark" aria-hidden="true">i</span><span id="mode-note">Each blue line has its own random tilt from −10° to +10°. The orange transversal stays fixed.</span></p>
     <span id="live-message" aria-live="polite"></span>
   </main>
 
@@ -532,7 +532,6 @@
     (() => {
       const upperLine = document.getElementById('upper-line');
       const lowerLine = document.getElementById('lower-line');
-      const transversalLine = document.querySelector('.transversal');
       const markers = document.getElementById('markers');
       const activity = document.querySelector('.activity');
       const confettiCanvas = document.getElementById('win-confetti');
@@ -549,14 +548,14 @@
       const propertyOptions = document.getElementById('property-options');
       const diagramDescription = document.getElementById('diagram-description');
       const modeButtons = [...document.querySelectorAll('[data-mode]')];
-      const diagramCenter = { x: 400, y: 250 };
-      const lineBounds = { left: 24, right: 776, top: 24, bottom: 476 };
-      const minimumCrossingAngle = 42;
-      const minimumIndependentTiltDifference = 2;
+      const centerX = 400;
+      const transversalTop = { x: 345, y: 45 };
+      const transversalBottom = { x: 415, y: 480 };
+      const transversalSlope = (transversalBottom.x - transversalTop.x) / (transversalBottom.y - transversalTop.y);
       const modeNotes = {
-        independent: 'The orange transversal is randomly near vertical or near horizontal. Each blue line gets a different angle from 30° to 120°.',
-        parallel: 'The orange transversal is randomly near vertical or near horizontal. The blue lines stay parallel at an angle from 30° to 120°.',
-        parallel2: 'The orange transversal is randomly near vertical or near horizontal. The blue lines stay parallel; level 2 adds vertical angles and linear pairs.'
+        independent: 'Each blue line gets its own random tilt from −10° to +10°. The orange transversal stays fixed.',
+        parallel: 'The blue lines share a random tilt from −10° to +10°. The orange transversal stays fixed.',
+        parallel2: 'The blue lines share a random tilt from −10° to +10°. Level 2 adds vertical angles and linear pairs; the orange transversal stays fixed.'
       };
       const relationships = [
         { name: 'corresponding', pairs: [[1, 5], [2, 6], [3, 7], [4, 8]] },
@@ -576,72 +575,27 @@
       let answered = false;
       let confettiFrame = null;
 
-      function randomDegree(minimum, maximum) {
-        return minimum + Math.floor(Math.random() * (maximum - minimum + 1));
+      function randomTilt() {
+        return Math.random() * 20 - 10;
       }
 
-      function normalizedLineAngle(angleDegrees) {
-        return ((angleDegrees % 180) + 180) % 180;
+      function setLine(line, yCenter, tiltDegrees) {
+        const slope = Math.tan(tiltDegrees * Math.PI / 180);
+        const y1 = yCenter + slope * (48 - centerX);
+        const y2 = yCenter + slope * (752 - centerX);
+        line.setAttribute('y1', y1.toFixed(2));
+        line.setAttribute('y2', y2.toFixed(2));
       }
 
-      function lineAngleDifference(firstAngle, secondAngle) {
-        const difference = Math.abs(normalizedLineAngle(firstAngle) - normalizedLineAngle(secondAngle));
-        return Math.min(difference, 180 - difference);
-      }
-
-      function randomBlueAngle(transversalAngle, otherBlueAngle = null) {
-        const choices = [];
-        for (let angle = 30; angle <= 120; angle += 1) {
-          if (lineAngleDifference(angle, transversalAngle) < minimumCrossingAngle) continue;
-          if (otherBlueAngle !== null && Math.abs(angle - otherBlueAngle) < minimumIndependentTiltDifference) continue;
-          choices.push(angle);
-        }
-        return choices[randomDegree(0, choices.length - 1)];
-      }
-
-      function pointAlongLine(point, angleDegrees, distance) {
-        const angle = angleDegrees * Math.PI / 180;
-        return {
-          x: point.x + Math.cos(angle) * distance,
-          y: point.y + Math.sin(angle) * distance
-        };
-      }
-
-      function lineEndpoints(point, angleDegrees) {
-        const angle = angleDegrees * Math.PI / 180;
-        const dx = Math.cos(angle);
-        const dy = Math.sin(angle);
-        const intersections = [];
-        const addIntersection = t => {
-          const x = point.x + t * dx;
-          const y = point.y + t * dy;
-          if (x >= lineBounds.left - .01 && x <= lineBounds.right + .01 && y >= lineBounds.top - .01 && y <= lineBounds.bottom + .01) {
-            intersections.push({ x, y, t });
-          }
-        };
-
-        if (Math.abs(dx) > 1e-6) {
-          addIntersection((lineBounds.left - point.x) / dx);
-          addIntersection((lineBounds.right - point.x) / dx);
-        }
-        if (Math.abs(dy) > 1e-6) {
-          addIntersection((lineBounds.top - point.y) / dy);
-          addIntersection((lineBounds.bottom - point.y) / dy);
-        }
-        intersections.sort((a, b) => a.t - b.t);
-        return [intersections[0], intersections[intersections.length - 1]];
-      }
-
-      function setLine(line, point, angleDegrees) {
-        const [start, end] = lineEndpoints(point, angleDegrees);
-        line.setAttribute('x1', start.x.toFixed(2));
-        line.setAttribute('y1', start.y.toFixed(2));
-        line.setAttribute('x2', end.x.toFixed(2));
-        line.setAttribute('y2', end.y.toFixed(2));
+      function intersection(yCenter, tiltDegrees) {
+        const lineSlope = Math.tan(tiltDegrees * Math.PI / 180);
+        const intercept = transversalTop.x - transversalSlope * transversalTop.y;
+        const y = (yCenter + lineSlope * (intercept - centerX)) / (1 - lineSlope * transversalSlope);
+        return { x: intercept + transversalSlope * y, y };
       }
 
       function labelPoint(point, angle) {
-        const radius = 56;
+        const radius = 43;
         return {
           x: point.x + Math.cos(angle) * radius,
           y: point.y + Math.sin(angle) * radius
@@ -682,17 +636,15 @@
         markers.append(halo, core);
       }
 
-      function addIntersectionLabels(point, blueAngleDegrees, transversalAngleDegrees, firstNumber) {
-        const blueAngle = blueAngleDegrees * Math.PI / 180;
-        const transversalAngle = transversalAngleDegrees * Math.PI / 180;
-        let sectorGap = (transversalAngle - blueAngle) % Math.PI;
-        if (sectorGap < 0) sectorGap += Math.PI;
-        // Keep each number in the same sector relative to the two line directions.
+      function addIntersectionLabels(point, tiltDegrees, firstNumber) {
+        const horizontalAngle = tiltDegrees * Math.PI / 180;
+        const transversalAngle = Math.atan2(transversalBottom.y - transversalTop.y, transversalBottom.x - transversalTop.x);
+        // Keep the familiar upper-left, upper-right, lower-right, lower-left numbering.
         const centers = [
-          blueAngle + sectorGap / 2 + Math.PI,
-          blueAngle + sectorGap / 2 + Math.PI * 1.5,
-          blueAngle + sectorGap / 2,
-          blueAngle + sectorGap / 2 + Math.PI / 2
+          (horizontalAngle + transversalAngle) / 2 + Math.PI,
+          (horizontalAngle + transversalAngle) / 2 + Math.PI * 1.5,
+          (horizontalAngle + transversalAngle) / 2,
+          (horizontalAngle + transversalAngle) / 2 + Math.PI / 2
         ];
         appendCrossing(point);
         appendLabel(firstNumber, point, centers[0]);
@@ -735,8 +687,7 @@
         scoreElement.addEventListener('animationend', () => scoreElement.classList.remove('success-pop'), { once: true });
       }
 
-      function applyQuestionMultiplier() {
-        const pointsEarned = questionState.pointsEarned;
+      function applyQuestionMultiplier(pointsEarned = 1) {
         if (pointsEarned > 0 && Math.random() < 0.10) {
           const bonusPoints = pointsEarned * 3;
           score += bonusPoints;
@@ -845,10 +796,10 @@
             property: equalRelationships.includes(relationship.name) ? 'congruent' : 'supplementary',
             phase: 'relationship',
             relationshipAttempts: 0,
-            pointsEarned: 0
+            propertyAttempts: 0
           };
           questionElement.textContent = `What relationship do ∠${angles[0]} and ∠${angles[1]} have?`;
-          feedbackElement.textContent = 'A first-try relationship answer earns 1 point; the classification earns another.';
+          feedbackElement.textContent = 'Each part can earn 1 point for a first-try correct answer. Keep trying after a miss; only that part’s point is lost.';
           relationshipOptions.hidden = false;
           propertyOptions.hidden = true;
         } else {
@@ -862,9 +813,9 @@
               }))
           );
           const choice = choices[Math.floor(Math.random() * choices.length)];
-          questionState = { mode: 'independent', source, relationship: choice.name, answer: choice.answer, pointsEarned: 0 };
+          questionState = { mode: 'independent', source, relationship: choice.name, answer: choice.answer, attempts: 0 };
           questionElement.textContent = `Find the ${choice.name} angle to ∠${source}.`;
-          feedbackElement.textContent = 'Click or tap the matching angle number.';
+          feedbackElement.textContent = 'A first-try answer earns 1 point. You can keep trying after a miss, but this question will earn no points.';
           relationshipOptions.hidden = true;
           propertyOptions.hidden = true;
         }
@@ -873,24 +824,28 @@
 
       function chooseAnswer(label) {
         if (answered || !questionState || questionState.mode !== 'independent') return;
+        questionState.attempts += 1;
         const selected = Number(label.dataset.angle);
         markers.querySelectorAll('.angle-label').forEach(angleLabel => angleLabel.removeAttribute('data-state'));
         if (selected === questionState.answer) {
           answered = true;
-          score += 1;
-          questionState.pointsEarned += 1;
-          const award = applyQuestionMultiplier();
-          scoreElement.textContent = String(score);
-          animateScore();
           label.setAttribute('data-state', 'correct');
-          const bonusMessage = award.multiplier === 4 ? ` 4× bonus! This question earned ${award.totalPoints} points.` : '';
-          feedbackElement.textContent = `Correct! ∠${selected} is the ${questionState.relationship} angle to ∠${questionState.source}.${bonusMessage}`;
+          if (questionState.attempts === 1) {
+            score += 1;
+            const award = applyQuestionMultiplier(1);
+            scoreElement.textContent = String(score);
+            animateScore();
+            const bonusMessage = award.multiplier === 4 ? ` 4× bonus! This question earned ${award.totalPoints} points.` : ' +1 point.';
+            feedbackElement.textContent = `Correct! ∠${selected} is the ${questionState.relationship} angle to ∠${questionState.source}.${bonusMessage}`;
+          } else {
+            feedbackElement.textContent = `Correct! ∠${selected} is the ${questionState.relationship} angle to ∠${questionState.source}. This question earns no points because of the earlier miss.`;
+          }
           feedbackElement.className = 'answer-feedback is-correct';
           nextQuestionButton.disabled = false;
           animateSuccess(label);
         } else {
           label.setAttribute('data-state', 'incorrect');
-          feedbackElement.textContent = 'Not quite. Try another angle.';
+          feedbackElement.textContent = 'Not quite. Keep trying; this question’s point is no longer available.';
           feedbackElement.className = 'answer-feedback is-incorrect';
         }
       }
@@ -905,12 +860,13 @@
           questionElement.textContent = `Are ∠${questionState.angles[0]} and ∠${questionState.angles[1]} congruent or supplementary?`;
           if (questionState.relationshipAttempts === 1) {
             score += 1;
-            questionState.pointsEarned += 1;
+            const award = applyQuestionMultiplier(1);
             scoreElement.textContent = String(score);
             animateScore();
-            feedbackElement.textContent = 'Correct on your first try! +1 point. Now classify the pair.';
+            const bonusMessage = award.multiplier === 4 ? ' 4× bonus! This part earned 4 points.' : ' +1 point.';
+            feedbackElement.textContent = `Correct on your first try!${bonusMessage} Now classify the pair; this part can earn 1 point on the first try too.`;
           } else {
-            feedbackElement.textContent = 'Correct! The relationship point is for a first-try answer. Now classify the pair.';
+            feedbackElement.textContent = 'Correct! The relationship point is no longer available after the retry. You can still earn 1 point by classifying the pair correctly on your first try.';
           }
           feedbackElement.className = 'answer-feedback is-correct';
           relationshipOptions.hidden = true;
@@ -919,64 +875,72 @@
           animateSuccess(button);
         } else {
           button.setAttribute('data-state', 'incorrect');
-          feedbackElement.textContent = 'Not quite. Keep trying; a relationship point is for a first-try answer.';
+          feedbackElement.textContent = 'Not quite. Keep trying; the relationship point is no longer available, but the classification can still earn 1 point.';
           feedbackElement.className = 'answer-feedback is-incorrect';
         }
       }
 
       function chooseProperty(button) {
         if (answered || !questionState || questionState.mode === 'independent' || questionState.phase !== 'measure') return;
+        questionState.propertyAttempts += 1;
         propertyOptions.querySelectorAll('.answer-option').forEach(option => option.removeAttribute('data-state'));
         if (button.dataset.property === questionState.property) {
           answered = true;
-          score += 1;
-          questionState.pointsEarned += 1;
-          const award = applyQuestionMultiplier();
-          scoreElement.textContent = String(score);
-          animateScore();
           button.setAttribute('data-state', 'correct');
-          const bonusMessage = award.multiplier === 4 ? ` 4× bonus! This question earned ${award.totalPoints} points.` : ' +1 point.';
-          feedbackElement.textContent = `Correct! ∠${questionState.angles[0]} and ∠${questionState.angles[1]} are ${questionState.property}.${bonusMessage}`;
+          if (questionState.propertyAttempts === 1) {
+            score += 1;
+            const award = applyQuestionMultiplier(1);
+            scoreElement.textContent = String(score);
+            animateScore();
+            const bonusMessage = award.multiplier === 4 ? ' 4× bonus! This part earned 4 points.' : ' +1 point.';
+            feedbackElement.textContent = `Correct! ∠${questionState.angles[0]} and ∠${questionState.angles[1]} are ${questionState.property}.${bonusMessage}`;
+          } else {
+            feedbackElement.textContent = `Correct! ∠${questionState.angles[0]} and ∠${questionState.angles[1]} are ${questionState.property}. The classification point is no longer available after the retry.`;
+          }
           feedbackElement.className = 'answer-feedback is-correct';
           nextQuestionButton.disabled = false;
           animateSuccess(button);
         } else {
           button.setAttribute('data-state', 'incorrect');
-          feedbackElement.textContent = 'Not quite. Try the other choice.';
+          feedbackElement.textContent = 'Not quite. Keep trying; the classification point is no longer available. Any relationship point already earned stays yours.';
           feedbackElement.className = 'answer-feedback is-incorrect';
         }
       }
 
       function refresh() {
         diagram.setAttribute('data-mode', mode);
-        const transversalIsVertical = Math.random() < 0.5;
-        const transversalAngle = transversalIsVertical
-          ? randomDegree(70, 110)
-          : randomDegree(-20, 20);
-        const firstBlueAngle = randomBlueAngle(transversalAngle);
-        const secondBlueAngle = mode === 'independent' ? randomBlueAngle(transversalAngle, firstBlueAngle) : firstBlueAngle;
-        const intersectionSpacing = 240 + Math.random() * 80;
-        const firstIntersection = pointAlongLine(diagramCenter, transversalAngle, -intersectionSpacing / 2);
-        const secondIntersection = pointAlongLine(diagramCenter, transversalAngle, intersectionSpacing / 2);
+        const upperTilt = randomTilt();
+        let lowerTilt = randomTilt();
+        if (mode !== 'independent') {
+          lowerTilt = upperTilt;
+        } else {
+          let attempts = 0;
+          while (Math.abs(upperTilt - lowerTilt) < 2 && attempts < 8) {
+            lowerTilt = randomTilt();
+            attempts += 1;
+          }
+          if (Math.abs(upperTilt - lowerTilt) < 2) {
+            lowerTilt = upperTilt > 0 ? upperTilt - 2 : upperTilt + 2;
+          }
+        }
 
-        setLine(upperLine, firstIntersection, firstBlueAngle);
-        setLine(lowerLine, secondIntersection, secondBlueAngle);
-        setLine(transversalLine, diagramCenter, transversalAngle);
+        setLine(upperLine, 175, upperTilt);
+        setLine(lowerLine, 345, lowerTilt);
         markers.replaceChildren();
-        addIntersectionLabels(firstIntersection, firstBlueAngle, transversalAngle, 1);
-        addIntersectionLabels(secondIntersection, secondBlueAngle, transversalAngle, 5);
+        addIntersectionLabels(intersection(175, upperTilt), upperTilt, 1);
+        addIntersectionLabels(intersection(345, lowerTilt), lowerTilt, 5);
         markSourceAngle();
         diagramDescription.textContent = mode === 'independent'
-          ? 'Two independently angled blue lines are crossed by an orange transversal. Each numbered angle region is a clickable answer choice. Angles one to four are around the first crossing along the transversal, and angles five to eight are around the second crossing.'
+          ? 'Two independently tilted blue lines are crossed by a fixed orange transversal. Each numbered angle region is a clickable answer choice. Angles one to four are around the upper crossing, and angles five to eight are around the lower crossing.'
           : mode === 'parallel2'
-            ? 'Two parallel lines are crossed by an orange transversal. The highlighted pair may be corresponding, alternate, same-side, vertical, or a linear pair. Choose the angle relationship, then decide whether the pair is congruent or supplementary.'
-            : 'Two parallel lines are crossed by an orange transversal. The highlighted pair is part of the question. Choose its angle relationship, then decide whether the pair is congruent or supplementary.';
+            ? 'Two parallel lines are crossed by a fixed orange transversal. The highlighted pair may be corresponding, alternate, same-side, vertical, or a linear pair. Choose the angle relationship, then decide whether the pair is congruent or supplementary.'
+            : 'Two parallel lines are crossed by a fixed orange transversal. The highlighted pair is part of the question. Choose its angle relationship, then decide whether the pair is congruent or supplementary.';
         refreshButton.classList.remove('is-refreshing');
         void refreshButton.offsetWidth;
         refreshButton.classList.add('is-refreshing');
         liveMessage.textContent = mode === 'independent'
-          ? 'New diagram. The blue lines have independent angles, and the orange transversal has changed angle.'
-          : 'New diagram. The blue lines are parallel, and the orange transversal has changed angle.';
+          ? 'New diagram. The two blue lines have independent tilts.'
+          : 'New diagram. The two blue lines are parallel.';
       }
 
       modeButtons.forEach(button => {
